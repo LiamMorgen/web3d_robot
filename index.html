@@ -2,48 +2,108 @@
 <html lang='en'>
 	<head>
 		<meta charset='utf-8' />
-		<title>threejs-animation-workflow</title>
+		<title>3D Interactive Display System</title>
 		<meta name='viewport' content='width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0'>
 		<link rel="shortcut icon" href="favicon.ico"/>
 		<style>
 			body {
-				background-color: #000;
+				background-color: #050510;
 				color: #888;
-				font-family: Helvetica;
-				line-height: 26px;
-				margin: 0px;
+				font-family: Arial, sans-serif;
+				margin: 0;
 				overflow: hidden;
 			}
 
-			h1 {
-				color: #fff;
-				margin: 8px;
+			#header {
+				position: fixed;
+				top: 0;
+				left: 0;
+				right: 0;
+				padding: 10px;
+				background: rgba(0,0,0,0.7);
+				z-index: 100;
 			}
 
-			a {
-				color: #48f;
-				text-decoration: none;
+			.logo {
+				color: #0ff;
+				font-size: 24px;
+				margin: 0;
 			}
 
-			a:hover {
-				color: #fff;
+			#controls {
+				position: fixed;
+				right: 20px;
+				top: 50%;
+				transform: translateY(-50%);
+				background: rgba(0,0,0,0.7);
+				padding: 15px;
+				border-radius: 10px;
+			}
+
+			.btn {
+				background: #0ff;
+				color: #000;
+				border: none;
+				padding: 8px 15px;
+				margin: 5px;
+				border-radius: 5px;
+				cursor: pointer;
+				transition: all 0.3s;
+			}
+
+			.btn:hover {
+				background: #00ffff80;
+			}
+
+			#model-select {
+				position: fixed;
+				bottom: 20px;
+				left: 50%;
+				transform: translateX(-50%);
+				background: rgba(0,0,0,0.7);
+				padding: 15px;
+				border-radius: 10px;
+				display: flex;
+				gap: 10px;
 			}
 
 			#container {
-				box-sizing: border-box;
-        height: 100%;
-        left: 0;
-        margin: 0;
-        position: absolute;
-        top: 0;
-        width: 100%;
+				width: 100%;
+				height: 100%;
+				position: fixed;
 			}
 		</style>
 	</head>
 	<body>
-	<div id='container'></div>
-	<script src='js/libs/three.min.js'></script>
-	<script src="js/controls/OrbitControls.js"></script>
-	<script src="js/main.js"></script>
+		<div id="header">
+			<h1 class="logo">3D Interactive Display System</h1>
+		</div>
+
+		<div id="controls">
+			<button class="btn" onclick="toggleWireframe()">Toggle Wireframe</button>
+			<button class="btn" onclick="toggleAnimation()">Play/Pause Animation</button>
+			<button class="btn" onclick="toggleLighting()">Toggle Lighting</button>
+		</div>
+
+		<div id="model-select">
+			<button class="btn" onclick="loadModelByKey('eva')">Eva</button>
+			<button class="btn" onclick="loadModelByKey('sign')">Sign</button>
+			<button class="btn" onclick="loadModelByKey('bottle')">Bottle</button>
+		</div>
+
+		<div id="info">
+			3D Interactive Display System<br />
+			<button onclick="testChangeState('walk')">Test Walk</button>
+			<button onclick="testChangeState('run')">Test Run</button>
+			<button onclick="testChangeState('idle')">Test Idle</button>
+		</div>
+
+		<div id='container'></div>
+
+		<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+		<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+		<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.7.9/dat.gui.min.js"></script>
+		<script src="js/main.js"></script>
 	</body>
 </html>

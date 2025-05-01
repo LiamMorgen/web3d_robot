@@ -1,2 +1,10 @@
 .DS_Store
 *.blend1
+
+models/*.glb
+models/*.gltf
+# models/*.png
+# models/*.jpg
+# models/*.jpeg
+models/*.gif
+# models/*.webp
