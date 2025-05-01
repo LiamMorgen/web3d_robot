@@ -1,17 +1,20 @@
 var clock, container, camera, scene, renderer, controls, listener;
 var ground, character;
 var light, ambientLight, directionalLight, pointLight;
-var mixer, actions, activeAction, previousAction;
-var api = { state: 'idle' };
-const loader = new THREE.GLTFLoader();
+var mixer;
+var actions = {};
+var activeActionName = 'idle';
 var isLoaded = false;
-var action = {}, activeActionName = 'idle';
+var isAnimationPlaying = true;
+
+var api = { state: 'idle' };
+
+const loader = new THREE.GLTFLoader();
 
 let isWireframe = false;
-let isAnimationPlaying = true;
 
-const walkSpeed = 1.5; // 定义行走速度
-const runSpeed = 4.0;  // 定义跑步速度
+const walkSpeed = 1.5;
+const runSpeed = 4.0;
 
 init();
 
@@ -75,7 +78,7 @@ function init() {
     character.receiveShadow = true;
     scene.add(character);
 
-    const textureLoader = new THREE.TextureLoader();  // 创建纹理加载器 eva-texture.png' 22222.png
+    const textureLoader = new THREE.TextureLoader();
     textureLoader.load('models/eva-texture.png', function(texture) {
       console.log('Eva 纹理加载成功');
       texture.flipY = false;
@@ -103,28 +106,29 @@ function init() {
       character.position.y += (size.y / 2) * scale;
 
       mixer = new THREE.AnimationMixer(character);
-      action = {};
+      actions = {};
       if (gltf.animations && gltf.animations.length > 0) {
         gltf.animations.forEach((clip) => {
           const actionName = clip.name.toLowerCase();
-          action[actionName] = mixer.clipAction(clip);
-          action[actionName].setEffectiveWeight(1);
-          action[actionName].enabled = true;
-          action[actionName].setLoop(THREE.LoopRepeat);
+          actions[actionName] = mixer.clipAction(clip);
+          actions[actionName].setEffectiveWeight(1);
+          actions[actionName].enabled = true;
+          actions[actionName].setLoop(THREE.LoopRepeat);
           if (actionName === 'hello' || actionName === 'wave') {
-            action[actionName].setLoop(THREE.LoopOnce);
-            action[actionName].clampWhenFinished = true;
+            actions[actionName].setLoop(THREE.LoopOnce);
+            actions[actionName].clampWhenFinished = true;
           }
         });
-        console.log('可用动画:', Object.keys(action));
+        console.log('可用动画:', Object.keys(actions));
 
         activeActionName = 'idle';
-        if (!action[activeActionName] && gltf.animations.length > 0) {
+        if (!actions[activeActionName] && gltf.animations.length > 0) {
           activeActionName = gltf.animations[0].name.toLowerCase();
         }
 
-        if (action[activeActionName]) {
-          action[activeActionName].play();
+        if (actions[activeActionName]) {
+          actions[activeActionName].play();
+          api.state = activeActionName;
           console.log(`播放初始动画: ${activeActionName}`);
         } else {
           console.warn("无法找到可播放的初始动画。");
@@ -153,8 +157,6 @@ function init() {
       console.log("Eva 模型已添加到场景 (无纹理)。");
       isLoaded = true;
     });
-
-    createGUI(character, gltf.animations);
   }, undefined, function(error) {
     console.error('加载 Eva 模型时出错:', error);
   });
@@ -229,10 +231,10 @@ function toggleWireframe() {
 }
 
 function toggleAnimation() {
-  if (!isLoaded || !mixer || !action[activeActionName]) return;
+  if (!isLoaded || !mixer || !actions[activeActionName]) return;
 
   isAnimationPlaying = !isAnimationPlaying;
-  const currentAction = action[activeActionName];
+  const currentAction = actions[activeActionName];
 
   if (isAnimationPlaying) {
     currentAction.paused = false;
@@ -251,94 +253,57 @@ function toggleLighting() {
 }
 
 function onDoubleClick() {
-  if (!isLoaded || !mixer || Object.keys(action).length <= 1) return;
+  if (!isLoaded || !mixer || Object.keys(actions).length <= 1) return;
 
-  const animationNames = Object.keys(action);
+  const animationNames = Object.keys(actions);
   let currentIndex = animationNames.indexOf(activeActionName);
 
   currentIndex = (currentIndex + 1) % animationNames.length;
   const nextActionName = animationNames[currentIndex];
 
-  fadeAction(nextActionName);
+  fadeToAction(nextActionName);
   console.log(`切换动画到: ${nextActionName}`);
 }
 
-function fadeAction(name) {
-  if (!action[name] || name === activeActionName) return;
+function fadeToAction(name, duration) {
+  if (!actions[name] || name === activeActionName) {
+    console.warn(`fadeToAction: 动作 "${name}" 不存在或与当前动作相同。`);
+    return;
+  }
 
-  const fromAction = action[activeActionName] || null;
-  const toAction = action[name];
+  const fromAction = actions[activeActionName] || null;
+  const toAction = actions[name];
+
+  console.log(`淡入淡出: 从 ${activeActionName} 到 ${name}`);
 
   if (fromAction) {
-    fromAction.fadeOut(0.3);
+    fromAction.fadeOut(duration);
   }
 
   toAction
     .reset()
     .setEffectiveTimeScale(1)
     .setEffectiveWeight(1)
-    .fadeIn(0.3)
+    .fadeIn(duration)
     .play();
 
   activeActionName = name;
+  api.state = name;
 
   isAnimationPlaying = true;
-  action[activeActionName].paused = false;
-}
-
-function createGUI(model, animations) {
-  const states = ['idle', 'walk', 'run', 'pose', 'hello'];
-  const gui = new dat.GUI();
-  mixer = new THREE.AnimationMixer(model);
-  actions = {};
-
-  const animFolder = gui.addFolder('Animations');
-  console.log("createGUI: Checking global 'api' object before adding:", api); 
-  if (!api || typeof api.state === 'undefined') {
-     console.error("createGUI: Global 'api' object or 'api.state' is missing!");
-     return; 
-  }
-
-  const clipCtrl = animFolder.add(api, 'state').options(states);
-  console.log("createGUI: Controller object created:", clipCtrl); 
-  
-  function handleStateChange(value) {
-      console.log("--- handleStateChange called! ---"); 
-      console.log("   New value received:", value);
-      api.state = value; 
-      fadeToAction(value, 0.5); 
-  }
-
-  console.log("createGUI: Attempting to attach onChange with named function...");
-  try {
-      clipCtrl.onChange(handleStateChange);
-      console.log("createGUI: Attached onChange successfully (apparently).");
-  } catch (e) {
-      console.error("createGUI: Error attaching onChange:", e);
-  }
-
-  animFolder.open();
-  
-  api.state = 'idle';
-  activeAction = actions[api.state];
-  if (activeAction) {
-      activeAction.play();
-  } else {
-       console.warn("无法找到初始动画:", api.state);
-  }
 }
 
 function testChangeState(newState) {
-    console.log(`--- TEST BUTTON: Attempting to change state to: ${newState} ---`);
-    if (actions[newState]) {
-        api.state = newState; 
-        fadeToAction(newState, 0.5); 
-        console.log(`--- TEST BUTTON: State changed, fadeToAction called for ${newState} ---`);
-    } else {
-        console.error(`--- TEST BUTTON: Action '${newState}' not found! ---`);
-    }
+  console.log(`--- HTML 按钮: 尝试切换到: ${newState} ---`);
+  if (actions[newState]) {
+    fadeToAction(newState, 0.5);
+    console.log(`--- HTML 按钮: 调用 fadeToAction 处理 ${newState} ---`);
+  } else {
+    console.error(`--- HTML 按钮: 找不到动作 '${newState}'! 可用动作:`, Object.keys(actions));
+  }
 }
 
 window.toggleWireframe = toggleWireframe;
 window.toggleAnimation = toggleAnimation;
 window.toggleLighting = toggleLighting;
+window.testChangeState = testChangeState;
