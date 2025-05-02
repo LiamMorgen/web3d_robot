@@ -16,6 +16,21 @@ let isWireframe = false;
 const walkSpeed = 1.5;
 const runSpeed = 4.0;
 
+// 声明全局变量存储不同的模型
+var models = {
+  eva: null,
+  sign: null,
+  bottle: null
+};
+
+var keyStates = {
+  up: false,
+  down: false,
+  left: false,
+  right: false,
+  shift: false
+};
+
 init();
 
 function init() {
@@ -39,6 +54,7 @@ function init() {
   controls.enableDamping = true;
   
   ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+  ambientLight.intensity = 0.2;  // 增强环境光
   scene.add(ambientLight);
 
   directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
@@ -48,6 +64,80 @@ function init() {
   pointLight = new THREE.PointLight(0xffaabb, 0.6, 15);
   pointLight.position.set(-3, 3, 3);
   scene.add(pointLight);
+
+  // 添加专门照亮汽车的聚光灯
+  const spotLight = new THREE.SpotLight(0xffffff, 1.5);
+  spotLight.position.set(0, 5, 2);
+  spotLight.angle = Math.PI ;
+  spotLight.penumbra = 0.2;
+  spotLight.decay = 2;
+  spotLight.distance = 500;
+  scene.add(spotLight);
+
+  console.log("开始加载汽车模型...");
+  loader.load('models/car.glb', function(gltf) {
+    console.log('汽车模型加载成功');
+    const car = gltf.scene;
+    car.scale.set(0.5, 0.5, 0.5); // 调整比例
+    car.position.set(0, 0, 0); // 放在场景中心
+    car.rotation.y = Math.PI / 4; // 旋转一定角度
+    car.castShadow = true;
+    car.receiveShadow = true;
+    
+    // 处理车窗透明效果
+    car.traverse((child) => {
+      if (child.isMesh) {
+        console.log(`检测到mesh: ${child.name}`);
+        
+        // 查找包含glass或window的部分设置为透明
+        if (child.name.toLowerCase().includes('glass') || 
+            child.name.toLowerCase().includes('window') || 
+            child.name.toLowerCase().includes('windshield')) {
+          console.log(`设置透明材质: ${child.name}`);
+          
+          // 创建新的透明材质
+          if (Array.isArray(child.material)) {
+            child.material.forEach(mat => {
+              mat.transparent = true;
+              mat.opacity = 0.6;
+              mat.depthWrite = false;
+              mat.side = THREE.DoubleSide; // 双面渲染
+            });
+          } else {
+            child.material.transparent = true;
+            child.material.opacity = 0.6;
+            child.material.depthWrite = false;
+            child.material.side = THREE.DoubleSide; // 双面渲染
+          }
+          child.renderOrder = 1;
+        }
+
+        // 增加材质反射率
+        if (Array.isArray(child.material)) {
+          child.material.forEach(mat => {
+            mat.metalness = 0.8;     // 增加金属感
+            mat.roughness = 0.2;     // 降低粗糙度，增加光泽
+            mat.envMapIntensity = 1.5; // 增强环境反射
+          });
+        } else if (child.material) {
+          child.material.metalness = 0.8;
+          child.material.roughness = 0.2;
+          child.material.envMapIntensity = 1.5;
+        }
+      }
+    });
+    
+    scene.add(car);
+    models['car'] = car; // 存储在models对象中
+    
+    // 如果有需要，可以在这里调整相机位置
+    controls.target.set(car.position.x, car.position.y + 0.5, car.position.z);
+    
+  }, function(xhr) {
+    console.log((xhr.loaded / xhr.total * 100) + '% 汽车模型已加载');
+  }, function(error) {
+    console.error('加载汽车模型时出错:', error);
+  });
 
   console.log("开始加载地面模型...");
   loader.load('models/ground.glb', function(gltf) {
@@ -164,6 +254,50 @@ function init() {
   window.addEventListener('resize', onWindowResize, false);
   window.addEventListener('dblclick', onDoubleClick, false);
 
+  // 监听键盘按下事件
+  window.addEventListener('keydown', function(event) {
+    switch(event.key) {
+      case 'ArrowUp':
+        keyStates.up = true;
+        break;
+      case 'ArrowDown':
+        keyStates.down = true;
+        break;
+      case 'ArrowLeft':
+        keyStates.left = true;
+        break;
+      case 'ArrowRight':
+        keyStates.right = true;
+        break;
+      case 'Shift':
+        keyStates.shift = true;
+        break;
+    }
+    updateCharacterState();
+  });
+
+  // 监听键盘释放事件
+  window.addEventListener('keyup', function(event) {
+    switch(event.key) {
+      case 'ArrowUp':
+        keyStates.up = false;
+        break;
+      case 'ArrowDown':
+        keyStates.down = false;
+        break;
+      case 'ArrowLeft':
+        keyStates.left = false;
+        break;
+      case 'ArrowRight':
+        keyStates.right = false;
+        break;
+      case 'Shift':
+        keyStates.shift = false;
+        break;
+    }
+    updateCharacterState();
+  });
+
   animate();
 }
 
@@ -183,27 +317,48 @@ function animate() {
     mixer.update(dt);
   }
   
-  if (character && api) {
+  // 角色移动控制
+  if (character && isLoaded) {
     let currentSpeed = 0;
-    const currentState = api.state ? api.state.toLowerCase() : 'unknown';
-
-    console.log("Animate Check: State =", currentState);
-
-    if (currentState === 'walk') {
+    let rotationSpeed = 2.0; // 旋转速度
+    
+    if (api.state === 'walk') {
       currentSpeed = walkSpeed;
-    } else if (currentState === 'run') {
+    } else if (api.state === 'run') {
       currentSpeed = runSpeed;
     }
-
-    if (currentSpeed > 0 && dt > 0) {
-      const angle = character.rotation.y;
-      const deltaX = Math.sin(angle) * currentSpeed * dt;
-      const deltaZ = Math.cos(angle) * currentSpeed * dt;
-
-      console.log(`Animate Move: dX=${deltaX.toFixed(4)}, dZ=${deltaZ.toFixed(4)}`);
-
-      character.position.x += deltaX;
-      character.position.z += deltaZ;
+    
+    if (currentSpeed > 0) {
+      // 根据按键状态计算移动方向
+      if (keyStates.left) {
+        character.rotation.y += rotationSpeed * dt;
+      }
+      if (keyStates.right) {
+        character.rotation.y -= rotationSpeed * dt;
+      }
+      
+      // 计算前进方向
+      let moveZ = 0;
+      let moveX = 0;
+      
+      if (keyStates.up) {
+        moveZ = 1;
+      }
+      if (keyStates.down) {
+        moveZ = -1;
+      }
+      
+      if (moveZ !== 0) {
+        const angle = character.rotation.y;
+        const deltaX = Math.sin(angle) * currentSpeed * dt * moveZ;
+        const deltaZ = Math.cos(angle) * currentSpeed * dt * moveZ;
+        
+        character.position.x += deltaX;
+        character.position.z += deltaZ;
+        
+        // 如果角色移动，让相机跟随
+        controls.target.set(character.position.x, character.position.y + 0.8, character.position.z);
+      }
     }
   }
   
@@ -213,6 +368,8 @@ function animate() {
 
 function toggleWireframe() {
   isWireframe = !isWireframe;
+  
+  // 处理character模型（Eva）
   if (character) {
     character.traverse((object) => {
       if (object.isMesh && object.material) {
@@ -224,9 +381,27 @@ function toggleWireframe() {
       }
     });
   }
+  
+  // 处理所有已加载的模型（包括汽车）
+  Object.keys(models).forEach(key => {
+    if (models[key]) {
+      models[key].traverse((object) => {
+        if (object.isMesh && object.material) {
+          if (Array.isArray(object.material)) {
+            object.material.forEach(mat => mat.wireframe = isWireframe);
+          } else {
+            object.material.wireframe = isWireframe;
+          }
+        }
+      });
+    }
+  });
+  
+  // 处理地面
   if (ground && ground.material) {
     ground.material.wireframe = isWireframe;
   }
+  
   console.log(`线框模式: ${isWireframe}`);
 }
 
@@ -303,7 +478,56 @@ function testChangeState(newState) {
   }
 }
 
+// 修改loadModelByKey函数，添加car模型的处理
+function loadModelByKey(modelKey) {
+  console.log(`切换到模型: ${modelKey}`);
+  
+  // 隐藏所有模型
+  if (character) {
+    character.visible = false;
+  }
+  
+  Object.keys(models).forEach(key => {
+    if (models[key]) {
+      models[key].visible = false;
+    }
+  });
+  
+  // 如果已经加载过该模型，则显示它
+  if (modelKey === 'car' && models['car']) {
+    models['car'].visible = true;
+    return;
+  }
+  
+  // 处理其他模型...
+  // ... 现有的loadModelByKey代码 ...
+}
+
+// 更新角色状态
+function updateCharacterState() {
+  // 检查是否有任何方向键被按下
+  var isMoving = keyStates.up || keyStates.down || keyStates.left || keyStates.right;
+  
+  if (!isMoving) {
+    // 如果没有方向键被按下，设置为idle状态
+    if (api.state !== 'idle') {
+      fadeToAction('idle', 0.2);
+    }
+  } else if (keyStates.shift) {
+    // 如果按下Shift键，设置为run状态
+    if (api.state !== 'run') {
+      fadeToAction('run', 0.2);
+    }
+  } else {
+    // 否则设置为walk状态
+    if (api.state !== 'walk') {
+      fadeToAction('walk', 0.2);
+    }
+  }
+}
+
 window.toggleWireframe = toggleWireframe;
 window.toggleAnimation = toggleAnimation;
 window.toggleLighting = toggleLighting;
 window.testChangeState = testChangeState;
+window.loadModelByKey = loadModelByKey;
