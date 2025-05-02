@@ -77,7 +77,7 @@ function init() {
   setupCamera();
   
   ambientLight = new THREE.AmbientLight(0xffffff, 0.1);
-  ambientLight.intensity = 0.1;  // 增强环境光
+  ambientLight.intensity = 0.01;  // 增强环境光
   scene.add(ambientLight);
 
   directionalLight = new THREE.DirectionalLight(0xffffff, 0.1);
@@ -517,8 +517,8 @@ function toggleAnimation() {
 
 function toggleLighting() {
   // 反转逻辑：默认光线暗，切换为亮
-  directionalLight.intensity = directionalLight.intensity < 0.5 ? 0.8 : 0.1;
-  pointLight.intensity = pointLight.intensity < 0.3 ? 0.6 : 0.1;
+  directionalLight.intensity = directionalLight.intensity < 0.5 ? 0.6 : 0.1;
+  pointLight.intensity = pointLight.intensity < 0.3 ? 0.4 : 0.1;
   console.log(`灯光强度切换: 方向光=${directionalLight.intensity.toFixed(1)}, 点光源=${pointLight.intensity.toFixed(1)}`);
 }
 
