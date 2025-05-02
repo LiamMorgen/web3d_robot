@@ -53,6 +53,11 @@ var speedBoostDuration = 8000; // 速度提升持续时间(毫秒)
 var speedBoostMultiplier = 1.5; // 速度提升倍数
 var speedBoostEndTime = 0; // 速度提升结束时间
 
+// 添加音频相关变量
+var sounds = {};
+var currentBackgroundMusic = null;
+var soundEnabled = true;
+
 init();
 
 function init() {
@@ -363,6 +368,9 @@ function init() {
 
   // 在最后调用性能优化
   optimizePerformance();
+
+  // 在init函数中添加音频系统初始化调用
+  initAudioSystem();
 }
 
 function onWindowResize() {
@@ -664,9 +672,12 @@ function startGame() {
   
   gameStarted = true;
   gameOver = false;
-  isPaused = false; // 确保重启游戏时不是暂停状态
+  isPaused = false;
   score = 0;
   gameStartTime = Date.now();
+  
+  // 切换到游戏背景音乐
+  playBackgroundMusic('gameMusic');
   
   // 设置初始位置，放在圆形边界内
   if (character) {
@@ -730,6 +741,29 @@ function endGame(reason = '游戏结束!') {
   // 更新UI
   document.getElementById('game-status').textContent = reason + ' 按空格键重新开始';
   
+  // 先播放失败音效，然后再播放背景音乐
+  if (sounds['fail']) {
+    // 先停止所有音乐
+    if (currentBackgroundMusic && sounds[currentBackgroundMusic]) {
+      sounds[currentBackgroundMusic].stop();
+      currentBackgroundMusic = null;
+    }
+    
+    // 播放失败音效
+    const failSound = sounds['fail'];
+    
+    // 设置失败音效播放完成后的回调
+    failSound.onEnded = function() {
+      // 失败音效播放完毕后再播放背景音乐
+      playBackgroundMusic('menuMusic');
+    };
+    
+    failSound.play();
+  } else {
+    // 如果失败音效还没加载好，直接播放背景音乐
+    playBackgroundMusic('menuMusic');
+  }
+  
   console.log(reason);
 }
 
@@ -764,13 +798,13 @@ function checkCollision() {
   const charPos = character.position;
   const carPos = models['car'].position;
   
-  // 使用平方距离比较，避免开方运算
   const dx = charPos.x - carPos.x;
   const dz = charPos.z - carPos.z;
   const distSquared = dx*dx + dz*dz;
   const safeDistanceSquared = safeDistance * safeDistance;
   
   if (distSquared < safeDistanceSquared) {
+    // 播放失败音效在endGame中处理
     endGame('你被车撞到了！');
   }
 }
@@ -1053,13 +1087,19 @@ function checkBoundary() {
   if (!gb) return false;
   
   if (gb.type === 'circle') {
-    // 使用平方距离比较，避免开方运算
     const dx = charPos.x - gb.centerX;
     const dz = charPos.z - gb.centerZ;
     const distSquared = dx*dx + dz*dz;
     const radiusSquared = gb.radius * gb.radius;
     
-    return distSquared > radiusSquared;
+    const isOutOfBounds = distSquared > radiusSquared;
+    
+    // 如果出界，播放失败音效
+    if (isOutOfBounds) {
+      playSound('fail');
+    }
+    
+    return isOutOfBounds;
   }
   
   return false;
@@ -1098,6 +1138,15 @@ function adjustGroundMaterial() {
 // 游戏暂停/恢复切换函数
 function togglePause() {
   isPaused = !isPaused;
+  
+  // 暂停/恢复背景音乐
+  if (currentBackgroundMusic && sounds[currentBackgroundMusic]) {
+    if (isPaused) {
+      sounds[currentBackgroundMusic].pause();
+    } else {
+      sounds[currentBackgroundMusic].play();
+    }
+  }
   
   // 显示暂停状态
   let statusElement = document.getElementById('game-status');
@@ -1243,11 +1292,14 @@ function applySpeedBoost() {
   // 设置结束时间
   speedBoostEndTime = Date.now() + speedBoostDuration;
   
+  // 播放奖励音效
+  playSound('reward');
+  
   // 更新UI提示
   const gameStatus = document.getElementById('game-status');
   if (gameStarted && !gameOver && !isPaused) {
     gameStatus.textContent = '速度提升中！';
-    gameStatus.style.color = '#ffff00'; // 黄色提示
+    gameStatus.style.color = '#ffff00';
   }
   
   console.log(`速度提升至：行走=${walkSpeed.toFixed(1)}, 奔跑=${runSpeed.toFixed(1)}`);
@@ -1287,3 +1339,76 @@ function updateFoods(time) {
     }
   });
 }
+
+// 在init函数开始部分添加音频系统初始化
+function initAudioSystem() {
+  // 创建音频监听器
+  listener = new THREE.AudioListener();
+  camera.add(listener);
+  
+  // 预加载所有音效和音乐
+  loadSound('reward', 'music/game-reward-317318.mp3', false);
+  loadSound('fail', 'music/level-fail-6416.mp3', false);
+  loadSound('menuMusic', 'music/happy-mood-126767.mp3', true);
+  loadSound('gameMusic', 'music/happy-xmas-happy-new-year-2025-271088.mp3', true);
+  
+  // 开始播放菜单音乐
+  playBackgroundMusic('menuMusic');
+}
+
+// 修改loadSound函数，让背景音乐立即播放
+function loadSound(name, url, isLoop) {
+  const sound = new THREE.Audio(listener);
+  
+  const audioLoader = new THREE.AudioLoader();
+  audioLoader.load(url, function(buffer) {
+    sound.setBuffer(buffer);
+    sound.setLoop(isLoop);
+    sound.setVolume(isLoop ? 0.5 : 0.7);
+    sounds[name] = sound;
+    
+    // 如果是菜单音乐且游戏未开始且页面刚加载，立即播放
+    if (name === 'menuMusic' && !gameStarted && !currentBackgroundMusic) {
+      playBackgroundMusic('menuMusic');
+    }
+    
+    console.log(`音频已加载: ${name}`);
+  });
+}
+
+// 播放音效
+function playSound(name) {
+  if (!soundEnabled) return;
+  
+  const sound = sounds[name];
+  if (sound && !sound.isPlaying) {
+    sound.play();
+  } else if (sound) {
+    sound.stop();
+    sound.play();
+  }
+}
+
+// 播放背景音乐
+function playBackgroundMusic(name) {
+  if (!soundEnabled) return;
+  
+  // 如果当前有背景音乐在播放，先停止
+  if (currentBackgroundMusic && sounds[currentBackgroundMusic] && sounds[currentBackgroundMusic].isPlaying) {
+    sounds[currentBackgroundMusic].stop();
+  }
+  
+  // 播放新的背景音乐
+  if (sounds[name]) {
+    sounds[name].play();
+    currentBackgroundMusic = name;
+  }
+}
+
+// 确保页面加载完成后立即播放背景音乐
+// 在window.onload事件中添加以下代码，确保音频系统初始化后尝试播放
+window.addEventListener('load', function() {
+  if (!currentBackgroundMusic && sounds['menuMusic']) {
+    playBackgroundMusic('menuMusic');
+  }
+});
