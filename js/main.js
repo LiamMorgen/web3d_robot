@@ -998,22 +998,22 @@ function fixBoundaryDetection() {
   console.log("已设置圆形边界，半径:", window.groundBoundary.radius);
   
   // 添加圆形边界可视化（调试用）
-  const segments = 64; // 圆的分段数
-  const circleGeometry = new THREE.BufferGeometry();
-  const gb = window.groundBoundary;
-  const circlePoints = [];
+  // const segments = 64; // 圆的分段数
+  // const circleGeometry = new THREE.BufferGeometry();
+  // const gb = window.groundBoundary;
+  // const circlePoints = [];
   
-  for (let i = 0; i <= segments; i++) {
-    const theta = (i / segments) * Math.PI * 2;
-    const x = gb.centerX + Math.cos(theta) * gb.radius;
-    const z = gb.centerZ + Math.sin(theta) * gb.radius;
-    circlePoints.push(new THREE.Vector3(x, 0.1, z));
-  }
+  // for (let i = 0; i <= segments; i++) {
+  //   const theta = (i / segments) * Math.PI * 2;
+  //   const x = gb.centerX + Math.cos(theta) * gb.radius;
+  //   const z = gb.centerZ + Math.sin(theta) * gb.radius;
+  //   circlePoints.push(new THREE.Vector3(x, 0.1, z));
+  // }
   
-  circleGeometry.setFromPoints(circlePoints);
-  const circleMaterial = new THREE.LineBasicMaterial({ color: 0xff0000 });
-  const circleLine = new THREE.Line(circleGeometry, circleMaterial);
-  scene.add(circleLine);
+  // circleGeometry.setFromPoints(circlePoints);
+  // const circleMaterial = new THREE.LineBasicMaterial({ color: 0xff0000 });
+  // const circleLine = new THREE.Line(circleGeometry, circleMaterial);
+  // scene.add(circleLine);
 }
 
 // 3. 修改边界检测函数，使用圆形边界
