@@ -14,8 +14,8 @@ const loader = new THREE.GLTFLoader();
 
 let isWireframe = false;
 
-const walkSpeed = 1.5;
-const runSpeed = 4.0;
+let walkSpeed = 1.5;
+let runSpeed = 4.0;
 
 // 声明全局变量存储不同的模型
 var models = {
@@ -41,6 +41,17 @@ var carAcceleration = 0.0002; // 汽车加速度
 var carTurningSpeed = 1.5; // 汽车转向速度
 var safeDistance = 1.0; // 安全距离，小于这个距离将游戏结束
 var gameStartTime = 0;
+
+// 添加食物相关变量
+var foods = [];
+var maxFoods = 3; // 场景中最多存在的食物数量
+var foodSpawnInterval = 5000; // 生成食物的间隔时间(毫秒)
+var lastFoodSpawnTime = 0;
+var baseWalkSpeed = 1.5; // 保存原始行走速度
+var baseRunSpeed = 4.0; // 保存原始奔跑速度
+var speedBoostDuration = 8000; // 速度提升持续时间(毫秒)
+var speedBoostMultiplier = 1.5; // 速度提升倍数
+var speedBoostEndTime = 0; // 速度提升结束时间
 
 init();
 
@@ -274,6 +285,14 @@ function init() {
     console.error('加载 Eva 模型时出错:', error);
   });
 
+  // 加载寿司模型
+  loadNigiriModel().then(template => {
+    window.nigiriTemplate = template;
+    console.log("寿司模板准备完成");
+  }).catch(error => {
+    console.error("寿司模型加载失败:", error);
+  });
+
   window.addEventListener('resize', onWindowResize, false);
   window.addEventListener('dblclick', onDoubleClick, false);
 
@@ -355,69 +374,76 @@ function onWindowResize() {
 function animate() {
   requestAnimationFrame(animate);
   
+  const time = Date.now() * 0.001; // 当前时间(秒)
   const dt = clock.getDelta();
   
-  // 只有在非暂停状态下执行逻辑
-  if (!isPaused) {
-    // 动画混合器更新
-    if (isLoaded && mixer) {
-      mixer.update(dt);
+  // 如果游戏暂停，只更新渲染，不执行逻辑
+  if (isPaused) {
+    renderer.render(scene, camera);
+    return;
+  }
+  
+  // 动画混合器更新
+  if (isLoaded && mixer) {
+    mixer.update(dt);
+  }
+  
+  // 角色移动逻辑 - 添加实际的移动代码
+  if (character && api) {
+    let currentSpeed = 0;
+    const currentState = api.state ? api.state.toLowerCase() : 'unknown';
+    
+    if (currentState === 'walk') {
+      currentSpeed = walkSpeed;
+    } else if (currentState === 'run') {
+      currentSpeed = runSpeed;
     }
     
-    // 保持原有的角色移动逻辑不变
-    if (character && api) {
-      let currentSpeed = 0;
-      const currentState = api.state ? api.state.toLowerCase() : 'unknown';
+    if (currentSpeed > 0 && dt > 0) {
+      const angle = character.rotation.y;
+      const deltaX = Math.sin(angle) * currentSpeed * dt;
+      const deltaZ = Math.cos(angle) * currentSpeed * dt;
       
-      if (currentState === 'walk') {
-        currentSpeed = walkSpeed;
-      } else if (currentState === 'run') {
-        currentSpeed = runSpeed;
-      }
+      character.position.x += deltaX;
+      character.position.z += deltaZ;
       
-      if (currentSpeed > 0 && dt > 0) {
-        const angle = character.rotation.y;
-        const deltaX = Math.sin(angle) * currentSpeed * dt;
-        const deltaZ = Math.cos(angle) * currentSpeed * dt;
-        
-        character.position.x += deltaX;
-        character.position.z += deltaZ;
-        
-        // 更新相机目标位置
-        controls.target.set(character.position.x, character.position.y + 0.8, character.position.z);
-      }
-      
-      // 按键旋转处理
-      if (keyStates && (keyStates.left || keyStates.right)) {
-        const rotationSpeed = 2.0;
-        if (keyStates.left) {
-          character.rotation.y += rotationSpeed * dt;
-        }
-        if (keyStates.right) {
-          character.rotation.y -= rotationSpeed * dt;
-        }
-      }
+      // 更新相机目标位置
+      controls.target.set(character.position.x, character.position.y + 0.8, character.position.z);
     }
     
-    // 游戏逻辑
-    if (gameStarted && !gameOver) {
-      // 更新分数和时间
-      updateScore();
-      
-      // 更新汽车位置
-      updateCarPosition(dt);
-      
-      // 碰撞检测
-      checkCollision();
-      
-      // 边界检测
-      if (checkBoundary()) {
-        endGame('你掉出了边界！');
+    // 按键旋转处理
+    if (keyStates && (keyStates.left || keyStates.right)) {
+      const rotationSpeed = 2.0;
+      if (keyStates.left) {
+        character.rotation.y += rotationSpeed * dt;
+      }
+      if (keyStates.right) {
+        character.rotation.y -= rotationSpeed * dt;
       }
     }
   }
   
-  // 更新控制器和渲染
+  // 游戏逻辑
+  if (gameStarted && !gameOver) {
+    // 更新食物系统
+    updateFoods(time);
+    
+    // 检查食物碰撞
+    checkFoodCollision();
+    
+    // 检查速度提升时间
+    checkSpeedBoostTime();
+    
+    // 原有的游戏逻辑
+    updateScore();
+    updateCarPosition(dt);
+    checkCollision();
+    
+    if (checkBoundary()) {
+      endGame('你掉出了边界！');
+    }
+  }
+  
   controls.update();
   renderer.render(scene, camera);
 }
@@ -661,6 +687,16 @@ function startGame() {
       character.position.z - models['car'].position.z
     );
   }
+  
+  // 重置速度
+  walkSpeed = baseWalkSpeed;
+  runSpeed = baseRunSpeed;
+  speedBoostEndTime = 0;
+  
+  // 清除现有食物
+  foods.forEach(food => scene.remove(food));
+  foods = [];
+  lastFoodSpawnTime = Date.now();
   
   // 更新UI
   document.getElementById('game-status').textContent = '游戏进行中';
@@ -1090,4 +1126,151 @@ function optimizePerformance() {
   
   // 优化渲染器
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+}
+
+// 加载寿司模型
+function loadNigiriModel() {
+  return new Promise((resolve, reject) => {
+    console.log("开始加载寿司模型...");
+    loader.load('models/nigiri.glb', function(gltf) {
+      console.log('寿司模型加载成功');
+      const nigiriTemplate = gltf.scene;
+      nigiriTemplate.scale.set(0.2, 0.2, 0.2); // 设置合适的大小
+      nigiriTemplate.visible = false; // 模板初始不可见
+      scene.add(nigiriTemplate);
+      resolve(nigiriTemplate);
+    }, undefined, function(error) {
+      console.error('加载寿司模型时出错:', error);
+      reject(error);
+    });
+  });
+}
+
+// 在随机位置生成食物
+function spawnFood() {
+  if (!window.nigiriTemplate) return;
+  
+  // 检查是否达到最大食物数量
+  if (foods.length >= maxFoods) return;
+  
+  // 在边界内随机位置
+  const gb = window.groundBoundary;
+  if (!gb || gb.type !== 'circle') return;
+  
+  // 随机角度和距离
+  const angle = Math.random() * Math.PI * 2;
+  const distance = Math.random() * (gb.radius * 0.8); // 80%半径内，避免太靠近边缘
+  
+  const x = gb.centerX + Math.cos(angle) * distance;
+  const z = gb.centerZ + Math.sin(angle) * distance;
+  
+  // 克隆模板创建新食物
+  const food = window.nigiriTemplate.clone();
+  food.position.set(x, 0.3, z); // 稍微高于地面
+  food.rotation.y = Math.random() * Math.PI * 2; // 随机旋转
+  food.visible = true;
+  
+  // 添加动画效果
+  const initialY = food.position.y;
+  food.userData = {
+    spawnTime: Date.now(),
+    initialY: initialY,
+    animatePosition: function(time) {
+      // 上下浮动动画
+      food.position.y = initialY + Math.sin(time * 3) * 0.1;
+      // 缓慢旋转
+      food.rotation.y += 0.01;
+    },
+    id: Date.now() + '_' + Math.floor(Math.random() * 1000)
+  };
+  
+  scene.add(food);
+  foods.push(food);
+  
+  console.log(`生成食物，当前食物数量: ${foods.length}`);
+}
+
+// 检查角色与食物的碰撞
+function checkFoodCollision() {
+  if (!gameStarted || gameOver || !character) return;
+  
+  const charPos = character.position;
+  const collectionDistance = 1.0; // 收集距离
+  const collectionDistanceSq = collectionDistance * collectionDistance;
+  
+  for (let i = foods.length - 1; i >= 0; i--) {
+    const food = foods[i];
+    const foodPos = food.position;
+    
+    // 计算距离平方
+    const dx = charPos.x - foodPos.x;
+    const dz = charPos.z - foodPos.z;
+    const distSq = dx*dx + dz*dz;
+    
+    if (distSq <= collectionDistanceSq) {
+      // 吃到食物，提升速度
+      applySpeedBoost();
+      
+      // 移除食物
+      scene.remove(food);
+      foods.splice(i, 1);
+      
+      // 添加收集动画或音效
+      console.log("吃到寿司，速度提升!");
+    }
+  }
+}
+
+// 应用速度提升
+function applySpeedBoost() {
+  // 设置新的速度值
+  walkSpeed = baseWalkSpeed * speedBoostMultiplier;
+  runSpeed = baseRunSpeed * speedBoostMultiplier;
+  
+  // 设置结束时间
+  speedBoostEndTime = Date.now() + speedBoostDuration;
+  
+  // 更新UI提示
+  const gameStatus = document.getElementById('game-status');
+  if (gameStarted && !gameOver && !isPaused) {
+    gameStatus.textContent = '速度提升中！';
+    gameStatus.style.color = '#ffff00'; // 黄色提示
+  }
+  
+  console.log(`速度提升至：行走=${walkSpeed.toFixed(1)}, 奔跑=${runSpeed.toFixed(1)}`);
+}
+
+// 检查速度提升时间
+function checkSpeedBoostTime() {
+  if (speedBoostEndTime > 0 && Date.now() > speedBoostEndTime) {
+    // 恢复原速度
+    walkSpeed = baseWalkSpeed;
+    runSpeed = baseRunSpeed;
+    speedBoostEndTime = 0;
+    
+    // 更新UI
+    const gameStatus = document.getElementById('game-status');
+    if (gameStarted && !gameOver && !isPaused) {
+      gameStatus.textContent = '游戏进行中';
+      gameStatus.style.color = '#0ff'; // 恢复原来的颜色
+    }
+    
+    console.log("速度提升结束，恢复正常速度");
+  }
+}
+
+// 管理食物生成的更新函数
+function updateFoods(time) {
+  // 定时生成新食物
+  if (Date.now() - lastFoodSpawnTime > foodSpawnInterval && foods.length < maxFoods) {
+    spawnFood();
+    lastFoodSpawnTime = Date.now();
+  }
+  
+  // 更新现有食物的动画
+  foods.forEach(food => {
+    if (food.userData && food.userData.animatePosition) {
+      food.userData.animatePosition(time);
+    }
+  });
 }
