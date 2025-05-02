@@ -6,6 +6,7 @@ var actions = {};
 var activeActionName = 'idle';
 var isLoaded = false;
 var isAnimationPlaying = true;
+var isPaused = false;
 
 var api = { state: 'idle' };
 
@@ -57,11 +58,12 @@ function init() {
   container.appendChild(renderer.domElement);
 
   camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-  camera.position.set(0, 1.5, 3.5);
-
+  
   controls = new THREE.OrbitControls(camera, renderer.domElement);
-  controls.target = new THREE.Vector3(0, 0.8, 0);
   controls.enableDamping = true;
+  
+  // 设置俯视相机
+  setupCamera();
   
   ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
   ambientLight.intensity = 0.2;  // 增强环境光
@@ -152,17 +154,16 @@ function init() {
   console.log("开始加载地面模型...");
   loader.load('models/ground.glb', function(gltf) {
     console.log('地面模型加载成功');
-    const ground = gltf.scene;
-    ground.rotation.x = 0;
-    ground.rotation.y = 0;
-    ground.rotation.z = 0;
+    ground = gltf.scene;
     ground.position.y = -0.1;
     ground.receiveShadow = true;
     scene.add(ground);
-
-    const box = new THREE.Box3().setFromObject(ground);
-    const size = box.getSize(new THREE.Vector3());
-    console.log('地面模型尺寸:', size);
+    
+    // 调整地面亮度
+    adjustGroundMaterial();
+    
+    // 添加可靠的边界检测
+    fixBoundaryDetection();
   }, undefined, function(error) {
     console.error('加载地面模型时出错:', error);
   });
@@ -243,6 +244,9 @@ function init() {
 
       isLoaded = true;
       controls.target.set(character.position.x, character.position.y + size.y * scale / 2, character.position.z);
+
+      // 在这里调整模型尺寸
+      adjustModelScale();
     }, undefined, function(err) {
       console.error('加载 Eva 纹理时出错:', err);
       const box = new THREE.Box3().setFromObject(character);
@@ -256,6 +260,9 @@ function init() {
       scene.add(character);
       console.log("Eva 模型已添加到场景 (无纹理)。");
       isLoaded = true;
+
+      // 纹理加载失败也要调整尺寸
+      adjustModelScale();
     });
   }, undefined, function(error) {
     console.error('加载 Eva 模型时出错:', error);
@@ -308,8 +315,30 @@ function init() {
     updateCharacterState();
   });
 
+  // 监听P键暂停/恢复游戏
+  window.addEventListener('keydown', function(event) {
+    if (event.key === 'p' || event.key === 'P') {
+      togglePause();
+    }
+  });
+
   // 添加游戏UI
   addGameUI();
+
+  // 调用新的改进函数
+  enhanceLighting();
+  setBackgroundColor(); // 基本背景颜色
+  addParticleSystem(); // 添加粒子效果
+  
+  // 尝试加载天空盒，如果天空盒贴图不存在，会自动使用渐变背景
+  try {
+    addSkybox();
+  } catch (error) {
+    console.log('使用默认渐变背景');
+  }
+  
+  // 更新控制按钮样式
+  updateControlsStyle();
 
   animate();
 }
@@ -322,10 +351,16 @@ function onWindowResize() {
 
 function animate() {
   requestAnimationFrame(animate);
-  console.log("Animate loop running...");
   
   const dt = clock.getDelta();
   
+  // 如果游戏暂停，只更新渲染，不更新游戏逻辑
+  if (isPaused) {
+    renderer.render(scene, camera);
+    return; // 确保在暂停时完全返回，不执行后续代码
+  }
+  
+  // 只有在非暂停状态下才执行这些逻辑
   if (isLoaded && mixer) {
     mixer.update(dt);
   }
@@ -550,6 +585,13 @@ function updateCharacterState() {
       fadeToAction('walk', 0.2);
     }
   }
+
+  // 在角色移动后立即检查边界
+  if (character && gameStarted && !gameOver) {
+    if (checkBoundary()) {
+      endGame('你掉出了边界！');
+    }
+  }
 }
 
 // 显示游戏状态的HTML元素
@@ -563,7 +605,7 @@ function addGameUI() {
   gameUI.style.fontSize = '20px';
   gameUI.style.zIndex = '100';
   gameUI.innerHTML = `
-    <div id="game-status">按空格键开始游戏</div>
+    <div id="game-status">按空格键开始游戏 (P键暂停)</div>
     <div id="game-score">分数: 0</div>
     <div id="game-time">时间: 0秒</div>
   `;
@@ -588,45 +630,63 @@ function startGame() {
   
   gameStarted = true;
   gameOver = false;
+  isPaused = false; // 确保重启游戏时不是暂停状态
   score = 0;
   gameStartTime = Date.now();
   
-  // 设置初始位置
+  // 设置初始位置，放在圆形边界内
   if (character) {
-    character.position.set(0, 0, 0);
+    const gb = window.groundBoundary;
+    if (gb && gb.type === 'circle') {
+      // 放在中心位置
+      character.position.set(
+        gb.centerX,
+        character.position.y,
+        gb.centerZ
+      );
+    } else {
+      character.position.set(0, character.position.y, 0);
+    }
   }
   
-  if (models['car']) {
-    models['car'].position.set(10, 0, 10);
-    models['car'].rotation.y = 0;
+  // 设置汽车初始位置，放在角色对面
+  if (models['car'] && character) {
+    const angle = Math.random() * Math.PI * 2;
+    const distance = 8; // 比边界小一些的距离
+    
+    models['car'].position.set(
+      character.position.x + Math.sin(angle) * distance,
+      models['car'].position.y,
+      character.position.z + Math.cos(angle) * distance
+    );
+    
+    // 让汽车面向角色
+    models['car'].rotation.y = Math.atan2(
+      character.position.x - models['car'].position.x,
+      character.position.z - models['car'].position.z
+    );
   }
   
   // 更新UI
   document.getElementById('game-status').textContent = '游戏进行中';
   document.getElementById('game-score').textContent = `分数: ${score}`;
   
-  // 确保角色可见
-  if (character) {
-    character.visible = true;
-  }
-  
-  // 确保汽车可见
-  if (models['car']) {
-    models['car'].visible = true;
-  }
+  // 确保角色和汽车可见
+  if (character) character.visible = true;
+  if (models['car']) models['car'].visible = true;
   
   console.log('游戏开始!');
 }
 
 // 结束游戏
-function endGame() {
+function endGame(reason = '游戏结束!') {
   gameStarted = false;
   gameOver = true;
   
   // 更新UI
-  document.getElementById('game-status').textContent = '游戏结束! 按空格键重新开始';
+  document.getElementById('game-status').textContent = reason + ' 按空格键重新开始';
   
-  console.log('游戏结束!');
+  console.log(reason);
 }
 
 // 重置游戏
@@ -661,7 +721,7 @@ function checkCollision() {
   const charPos = character.position;
   const carPos = models['car'].position;
   
-  // 计算距离
+  // 计算人物与汽车距离
   const distance = Math.sqrt(
     Math.pow(charPos.x - carPos.x, 2) + 
     Math.pow(charPos.z - carPos.z, 2)
@@ -669,8 +729,10 @@ function checkCollision() {
   
   // 如果距离小于安全距离，游戏结束
   if (distance < safeDistance) {
-    endGame();
+    endGame('你被车撞到了！');
   }
+  
+  // 边界检测移到独立函数中，在animate中调用
 }
 
 // 更新汽车位置，追逐角色
@@ -706,8 +768,26 @@ function updateCarPosition(dt) {
   const moveX = Math.sin(car.rotation.y) * carSpeed * dt;
   const moveZ = Math.cos(car.rotation.y) * carSpeed * dt;
   
-  car.position.x += moveX;
-  car.position.z += moveZ;
+  const newX = car.position.x + moveX;
+  const newZ = car.position.z + moveZ;
+  
+  // 检查是否会超出边界
+  const gb = window.groundBoundary;
+  if (gb && gb.type === 'circle') {
+    const distanceToCenter = Math.sqrt(
+      Math.pow(newX - gb.centerX, 2) + 
+      Math.pow(newZ - gb.centerZ, 2)
+    );
+    
+    // 如果不超出边界，则更新位置
+    if (distanceToCenter <= gb.radius * 0.95) { // 给汽车留一点边距
+      car.position.x = newX;
+      car.position.z = newZ;
+    }
+  } else {
+    car.position.x = newX;
+    car.position.z = newZ;
+  }
   
   // 确保汽车与地面接触
   car.position.y = 0.1;
@@ -727,3 +807,310 @@ window.toggleAnimation = toggleAnimation;
 window.toggleLighting = toggleLighting;
 window.testChangeState = testChangeState;
 window.loadModelByKey = loadModelByKey;
+
+// 1. 增强光照系统：添加散射光并调整现有灯光
+function enhanceLighting() {
+  // 增强环境光
+  ambientLight.intensity = 0.8;
+  ambientLight.color.set(0xccddff);
+  
+  // 添加半球光（从上方散射的柔和光线）
+  const hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x445566, 0.7);
+  hemisphereLight.position.set(0, 50, 0);
+  scene.add(hemisphereLight);
+  
+  // 调整现有方向光
+  directionalLight.intensity = 0.9;
+  directionalLight.position.set(5, 15, 10);
+  directionalLight.castShadow = true;
+  directionalLight.shadow.mapSize.width = 1024;
+  directionalLight.shadow.mapSize.height = 1024;
+  
+  // 增加柔和点光源
+  const softLight = new THREE.PointLight(0xffaa88, 0.8, 30);
+  softLight.position.set(5, 5, -5);
+  scene.add(softLight);
+}
+
+// 2. 添加天空盒作为背景
+function addSkybox() {
+  // 创建天空盒材质
+  const skyboxLoader = new THREE.CubeTextureLoader();
+  const skyboxTexture = skyboxLoader.load([
+    'textures/skybox/px.jpg', 'textures/skybox/nx.jpg',
+    'textures/skybox/py.jpg', 'textures/skybox/ny.jpg',
+    'textures/skybox/pz.jpg', 'textures/skybox/nz.jpg'
+  ]);
+  
+  // 如果没有天空盒贴图，则创建渐变背景
+  if (!skyboxTexture) {
+    // 创建渐变背景
+    const vertexShader = `
+      varying vec3 vWorldPosition;
+      void main() {
+        vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+        vWorldPosition = worldPosition.xyz;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `;
+    
+    const fragmentShader = `
+      uniform vec3 topColor;
+      uniform vec3 bottomColor;
+      uniform float offset;
+      uniform float exponent;
+      varying vec3 vWorldPosition;
+      void main() {
+        float h = normalize(vWorldPosition + offset).y;
+        gl_FragColor = vec4(mix(bottomColor, topColor, max(pow(max(h, 0.0), exponent), 0.0)), 1.0);
+      }
+    `;
+    
+    const uniforms = {
+      topColor: { value: new THREE.Color(0x0077ff) },
+      bottomColor: { value: new THREE.Color(0x000033) },
+      offset: { value: 33 },
+      exponent: { value: 0.6 }
+    };
+    
+    const skyGeo = new THREE.SphereGeometry(400, 32, 15);
+    const skyMat = new THREE.ShaderMaterial({
+      uniforms: uniforms,
+      vertexShader: vertexShader,
+      fragmentShader: fragmentShader,
+      side: THREE.BackSide
+    });
+    
+    const sky = new THREE.Mesh(skyGeo, skyMat);
+    scene.add(sky);
+  } else {
+    scene.background = skyboxTexture;
+  }
+}
+
+// 3. 添加粒子系统作为背景点缀
+function addParticleSystem() {
+  const particleGeometry = new THREE.BufferGeometry();
+  const particleCount = 1000;
+  
+  const posArray = new Float32Array(particleCount * 3);
+  const sizeArray = new Float32Array(particleCount);
+  
+  for (let i = 0; i < particleCount; i++) {
+    // 随机位置在一个大球体内
+    const radius = 50 + Math.random() * 150;
+    const theta = Math.random() * Math.PI * 2;
+    const phi = Math.acos(2 * Math.random() - 1);
+    
+    posArray[i * 3] = radius * Math.sin(phi) * Math.cos(theta);
+    posArray[i * 3 + 1] = radius * Math.sin(phi) * Math.sin(theta) + 20;
+    posArray[i * 3 + 2] = radius * Math.cos(phi);
+    
+    // 随机大小
+    sizeArray[i] = Math.random() * 2 + 0.5;
+  }
+  
+  particleGeometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+  particleGeometry.setAttribute('size', new THREE.BufferAttribute(sizeArray, 1));
+  
+  const particleMaterial = new THREE.PointsMaterial({
+    size: 1,
+    color: 0x88aaff,
+    transparent: true,
+    opacity: 0.6,
+    sizeAttenuation: true
+  });
+  
+  const particleSystem = new THREE.Points(particleGeometry, particleMaterial);
+  scene.add(particleSystem);
+}
+
+// 4. 调整背景颜色
+function setBackgroundColor() {
+  // 设置场景背景颜色为深蓝色而不是纯黑
+  scene.background = new THREE.Color(0x0a1030);
+}
+
+// 5. 移动控制按钮到右上角的CSS
+function updateControlsStyle() {
+  document.head.insertAdjacentHTML('beforeend', `
+    <style>
+      #controls {
+        position: fixed !important;
+        right: 20px !important;
+        top: 60px !important; /* 在标题下方 */
+        transform: none !important;
+        display: flex !important;
+        flex-direction: row !important;
+        gap: 10px !important;
+      }
+      
+      #model-select {
+        bottom: unset !important;
+        top: 20px !important;
+        left: unset !important;
+        right: 20px !important;
+        transform: none !important;
+      }
+    </style>
+  `);
+}
+
+// 1. 调整模型尺寸
+function adjustModelScale() {
+  // 缩小Eva模型
+  if (character) {
+    // 获取当前比例，再缩小到原来的40%
+    const currentScale = character.scale.x;
+    const newScale = currentScale * 0.4;
+    character.scale.set(newScale, newScale, newScale);
+    
+    // 调整角色位置高度，避免下沉到地面
+    character.position.y = 0.2; 
+  }
+  
+  // 缩小汽车模型
+  Object.keys(models).forEach(key => {
+    if (models[key] && (key === 'car' || key === 'sign')) {
+      // 获取当前比例，再缩小到原来的40%
+      const currentScale = models[key].scale.x;
+      const newScale = currentScale * 0.4;
+      models[key].scale.set(newScale, newScale, newScale);
+      
+      // 调整车辆位置高度
+      models[key].position.y = 0.05;
+    }
+  });
+  
+  console.log("模型尺寸已调整");
+}
+
+// 2. 设置圆形边界
+function fixBoundaryDetection() {
+  // 设置圆形边界
+  window.groundBoundary = {
+    centerX: 0, // 地面中心X坐标
+    centerZ: 0, // 地面中心Z坐标
+    radius: 9.6, // 边界半径，根据实际地面调整
+    type: 'circle' // 标记边界类型为圆形
+  };
+  
+  console.log("已设置圆形边界，半径:", window.groundBoundary.radius);
+  
+  // 添加圆形边界可视化（调试用）
+  const segments = 64; // 圆的分段数
+  const circleGeometry = new THREE.BufferGeometry();
+  const gb = window.groundBoundary;
+  const circlePoints = [];
+  
+  for (let i = 0; i <= segments; i++) {
+    const theta = (i / segments) * Math.PI * 2;
+    const x = gb.centerX + Math.cos(theta) * gb.radius;
+    const z = gb.centerZ + Math.sin(theta) * gb.radius;
+    circlePoints.push(new THREE.Vector3(x, 0.1, z));
+  }
+  
+  circleGeometry.setFromPoints(circlePoints);
+  const circleMaterial = new THREE.LineBasicMaterial({ color: 0xff0000 });
+  const circleLine = new THREE.Line(circleGeometry, circleMaterial);
+  scene.add(circleLine);
+}
+
+// 3. 修改边界检测函数，使用圆形边界
+function checkBoundary() {
+  if (!gameStarted || gameOver || !character) return false;
+  
+  const charPos = character.position;
+  const gb = window.groundBoundary;
+  
+  if (!gb) return false;
+  
+  if (gb.type === 'circle') {
+    // 计算角色到圆心的距离
+    const distanceToCenter = Math.sqrt(
+      Math.pow(charPos.x - gb.centerX, 2) + 
+      Math.pow(charPos.z - gb.centerZ, 2)
+    );
+    
+    // 如果距离大于半径，则超出边界
+    if (distanceToCenter > gb.radius) {
+      console.log(`角色位置 (${charPos.x.toFixed(2)}, ${charPos.z.toFixed(2)}) 超出圆形边界!`);
+      console.log(`距离中心: ${distanceToCenter.toFixed(2)}, 边界半径: ${gb.radius}`);
+      return true;
+    }
+  } else {
+    // 保留原有的矩形边界检测代码作为备用
+    if (charPos.x < gb.minX || charPos.x > gb.maxX || 
+        charPos.z < gb.minZ || charPos.z > gb.maxZ) {
+      console.log(`角色位置 (${charPos.x.toFixed(2)}, ${charPos.z.toFixed(2)}) 超出矩形边界!`);
+      return true;
+    }
+  }
+  
+  return false;
+}
+
+// 4. 调整地面亮度
+function adjustGroundMaterial() {
+  if (ground) {
+    ground.traverse((child) => {
+      if (child.isMesh && child.material) {
+        console.log("调整地面材质:", child.name);
+        
+        if (Array.isArray(child.material)) {
+          child.material.forEach(mat => {
+            // 降低亮度和反光度
+            mat.color.multiplyScalar(0.6); // 减少颜色亮度
+            mat.roughness = 0.8; // 增加粗糙度，减少反光
+            mat.metalness = 0.1; // 降低金属感
+            mat.envMapIntensity = 0.3; // 降低环境贴图强度
+            mat.needsUpdate = true;
+          });
+        } else if (child.material) {
+          // 降低亮度和反光度
+          child.material.color.multiplyScalar(0.6);
+          child.material.roughness = 0.8;
+          child.material.metalness = 0.1;
+          child.material.envMapIntensity = 0.3;
+          child.material.needsUpdate = true;
+        }
+      }
+    });
+    console.log("地面亮度已调整");
+  }
+}
+
+// 游戏暂停/恢复切换函数
+function togglePause() {
+  isPaused = !isPaused;
+  
+  // 显示暂停状态
+  let statusElement = document.getElementById('game-status');
+  if (isPaused) {
+    if (gameStarted && !gameOver) {
+      statusElement.textContent = '游戏已暂停（按P继续）';
+    }
+    console.log('游戏已暂停');
+  } else {
+    if (gameStarted && !gameOver) {
+      statusElement.textContent = '游戏进行中';
+    }
+    console.log('游戏已恢复');
+  }
+}
+
+// 调整初始相机位置为更高的俯视角度
+function setupCamera() {
+  // 更高的俯视视角
+  camera.position.set(0, 10, 15); // 高度提高，后移一点
+  
+  // 调整控制器目标
+  controls.target = new THREE.Vector3(0, 0, 0); // 指向场景中心
+  controls.update();
+  
+  // 可选：限制相机旋转范围，保持一定俯视角度
+  controls.minPolarAngle = Math.PI / 6; // 30度
+  controls.maxPolarAngle = Math.PI / 2.5; // 约72度
+  
+  console.log('相机位置已调整为俯视角度');
+}
