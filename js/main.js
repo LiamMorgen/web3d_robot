@@ -76,15 +76,15 @@ function init() {
   // 设置俯视相机
   setupCamera();
   
-  ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+  ambientLight = new THREE.AmbientLight(0xffffff, 0.1);
   ambientLight.intensity = 0.1;  // 增强环境光
   scene.add(ambientLight);
 
-  directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+  directionalLight = new THREE.DirectionalLight(0xffffff, 0.1);
   directionalLight.position.set(5, 10, 7.5);
   scene.add(directionalLight);
 
-  pointLight = new THREE.PointLight(0xffaabb, 0.6, 15);
+  pointLight = new THREE.PointLight(0xffaabb, 0.1, 15);
   pointLight.position.set(-3, 3, 3);
   scene.add(pointLight);
 
@@ -516,8 +516,9 @@ function toggleAnimation() {
 }
 
 function toggleLighting() {
-  directionalLight.intensity = directionalLight.intensity > 0.1 ? 0.1 : 0.8;
-  pointLight.intensity = pointLight.intensity > 0.1 ? 0.4 : 0.1;
+  // 反转逻辑：默认光线暗，切换为亮
+  directionalLight.intensity = directionalLight.intensity < 0.5 ? 0.8 : 0.1;
+  pointLight.intensity = pointLight.intensity < 0.3 ? 0.6 : 0.1;
   console.log(`灯光强度切换: 方向光=${directionalLight.intensity.toFixed(1)}, 点光源=${pointLight.intensity.toFixed(1)}`);
 }
 
@@ -1147,7 +1148,7 @@ function loadNigiriModel() {
     loader.load('models/nigiri.glb', function(gltf) {
       console.log('寿司模型加载成功');
       const nigiriTemplate = gltf.scene;
-      nigiriTemplate.scale.set(0.3, 0.3, 0.3); // 增大寿司尺寸
+      nigiriTemplate.scale.set(0.4, 0.4, 0.4); // 增大寿司尺寸
       nigiriTemplate.visible = false; // 模板初始不可见
       scene.add(nigiriTemplate);
       resolve(nigiriTemplate);
@@ -1191,7 +1192,7 @@ function spawnFood() {
       // 上下浮动动画
       food.position.y = initialY + Math.sin(time * 3) * 0.1;
       // 缓慢旋转
-      food.rotation.y += 0.01;
+      food.rotation.y += 0.02;
     },
     id: Date.now() + '_' + Math.floor(Math.random() * 1000)
   };
