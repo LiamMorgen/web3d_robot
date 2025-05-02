@@ -31,6 +31,16 @@ var keyStates = {
   shift: false
 };
 
+// 添加游戏相关变量
+var gameStarted = false;
+var gameOver = false;
+var score = 0;
+var carSpeed = 1.0; // 汽车速度
+var carAcceleration = 0.0002; // 汽车加速度
+var carTurningSpeed = 1.5; // 汽车转向速度
+var safeDistance = 1.0; // 安全距离，小于这个距离将游戏结束
+var gameStartTime = 0;
+
 init();
 
 function init() {
@@ -298,6 +308,9 @@ function init() {
     updateCharacterState();
   });
 
+  // 添加游戏UI
+  addGameUI();
+
   animate();
 }
 
@@ -363,6 +376,19 @@ function animate() {
   }
   
   controls.update();
+
+  // 游戏逻辑更新
+  if (gameStarted && !gameOver) {
+    // 更新分数
+    updateScore();
+    
+    // 更新汽车位置
+    updateCarPosition(dt);
+    
+    // 检测碰撞
+    checkCollision();
+  }
+  
   renderer.render(scene, camera);
 }
 
@@ -525,6 +551,176 @@ function updateCharacterState() {
     }
   }
 }
+
+// 显示游戏状态的HTML元素
+function addGameUI() {
+  const gameUI = document.createElement('div');
+  gameUI.id = 'game-ui';
+  gameUI.style.position = 'fixed';
+  gameUI.style.top = '70px';
+  gameUI.style.left = '20px';
+  gameUI.style.color = '#0ff';
+  gameUI.style.fontSize = '20px';
+  gameUI.style.zIndex = '100';
+  gameUI.innerHTML = `
+    <div id="game-status">按空格键开始游戏</div>
+    <div id="game-score">分数: 0</div>
+    <div id="game-time">时间: 0秒</div>
+  `;
+  document.body.appendChild(gameUI);
+  
+  // 添加游戏开始按钮
+  const startButton = document.createElement('button');
+  startButton.textContent = '开始游戏';
+  startButton.className = 'btn';
+  startButton.style.position = 'fixed';
+  startButton.style.top = '170px';
+  startButton.style.left = '20px';
+  startButton.addEventListener('click', startGame);
+  document.body.appendChild(startButton);
+}
+
+// 开始游戏
+function startGame() {
+  if (gameOver) {
+    resetGame();
+  }
+  
+  gameStarted = true;
+  gameOver = false;
+  score = 0;
+  gameStartTime = Date.now();
+  
+  // 设置初始位置
+  if (character) {
+    character.position.set(0, 0, 0);
+  }
+  
+  if (models['car']) {
+    models['car'].position.set(10, 0, 10);
+    models['car'].rotation.y = 0;
+  }
+  
+  // 更新UI
+  document.getElementById('game-status').textContent = '游戏进行中';
+  document.getElementById('game-score').textContent = `分数: ${score}`;
+  
+  // 确保角色可见
+  if (character) {
+    character.visible = true;
+  }
+  
+  // 确保汽车可见
+  if (models['car']) {
+    models['car'].visible = true;
+  }
+  
+  console.log('游戏开始!');
+}
+
+// 结束游戏
+function endGame() {
+  gameStarted = false;
+  gameOver = true;
+  
+  // 更新UI
+  document.getElementById('game-status').textContent = '游戏结束! 按空格键重新开始';
+  
+  console.log('游戏结束!');
+}
+
+// 重置游戏
+function resetGame() {
+  score = 0;
+  carSpeed = 1.0;
+  
+  document.getElementById('game-score').textContent = `分数: ${score}`;
+  document.getElementById('game-time').textContent = `时间: 0秒`;
+}
+
+// 更新游戏分数
+function updateScore() {
+  if (!gameStarted || gameOver) return;
+  
+  const currentTime = Date.now();
+  const elapsedSeconds = Math.floor((currentTime - gameStartTime) / 1000);
+  
+  score = elapsedSeconds;
+  document.getElementById('game-score').textContent = `分数: ${score}`;
+  document.getElementById('game-time').textContent = `时间: ${elapsedSeconds}秒`;
+  
+  // 随着时间推移增加汽车速度
+  carSpeed += carAcceleration * elapsedSeconds;
+}
+
+// 检测碰撞
+function checkCollision() {
+  if (!gameStarted || gameOver) return;
+  if (!character || !models['car']) return;
+  
+  const charPos = character.position;
+  const carPos = models['car'].position;
+  
+  // 计算距离
+  const distance = Math.sqrt(
+    Math.pow(charPos.x - carPos.x, 2) + 
+    Math.pow(charPos.z - carPos.z, 2)
+  );
+  
+  // 如果距离小于安全距离，游戏结束
+  if (distance < safeDistance) {
+    endGame();
+  }
+}
+
+// 更新汽车位置，追逐角色
+function updateCarPosition(dt) {
+  if (!gameStarted || gameOver) return;
+  if (!character || !models['car']) return;
+  
+  const car = models['car'];
+  const charPos = character.position;
+  const carPos = car.position;
+  
+  // 计算目标方向
+  const targetAngle = Math.atan2(
+    charPos.x - carPos.x,
+    charPos.z - carPos.z
+  );
+  
+  // 计算当前汽车朝向与目标方向之间的差异
+  let angleDiff = targetAngle - car.rotation.y;
+  
+  // 确保角度差在-PI到PI之间
+  while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+  while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+  
+  // 逐渐转向目标方向
+  if (Math.abs(angleDiff) > 0.01) {
+    car.rotation.y += Math.sign(angleDiff) * Math.min(carTurningSpeed * dt, Math.abs(angleDiff));
+  } else {
+    car.rotation.y = targetAngle;
+  }
+  
+  // 向前移动
+  const moveX = Math.sin(car.rotation.y) * carSpeed * dt;
+  const moveZ = Math.cos(car.rotation.y) * carSpeed * dt;
+  
+  car.position.x += moveX;
+  car.position.z += moveZ;
+  
+  // 确保汽车与地面接触
+  car.position.y = 0.1;
+}
+
+// 监听空格键开始/重置游戏
+window.addEventListener('keydown', function(event) {
+  if (event.key === ' ' || event.code === 'Space') {
+    if (!gameStarted || gameOver) {
+      startGame();
+    }
+  }
+});
 
 window.toggleWireframe = toggleWireframe;
 window.toggleAnimation = toggleAnimation;
