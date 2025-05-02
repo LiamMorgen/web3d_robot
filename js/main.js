@@ -77,7 +77,7 @@ function init() {
   setupCamera();
   
   ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-  ambientLight.intensity = 0.2;  // 增强环境光
+  ambientLight.intensity = 0.1;  // 增强环境光
   scene.add(ambientLight);
 
   directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
@@ -401,8 +401,20 @@ function animate() {
     
     if (currentSpeed > 0 && dt > 0) {
       const angle = character.rotation.y;
-      const deltaX = Math.sin(angle) * currentSpeed * dt;
-      const deltaZ = Math.cos(angle) * currentSpeed * dt;
+      let deltaX = 0;
+      let deltaZ = 0;
+      
+      // 根据按键决定移动方向
+      if (keyStates.up) {
+        // 向前移动
+        deltaX += Math.sin(angle) * currentSpeed * dt;
+        deltaZ += Math.cos(angle) * currentSpeed * dt;
+      }
+      if (keyStates.down) {
+        // 向后移动
+        deltaX -= Math.sin(angle) * currentSpeed * dt;
+        deltaZ -= Math.cos(angle) * currentSpeed * dt;
+      }
       
       character.position.x += deltaX;
       character.position.z += deltaZ;
@@ -505,7 +517,7 @@ function toggleAnimation() {
 
 function toggleLighting() {
   directionalLight.intensity = directionalLight.intensity > 0.1 ? 0.1 : 0.8;
-  pointLight.intensity = pointLight.intensity > 0.1 ? 0.6 : 0.1;
+  pointLight.intensity = pointLight.intensity > 0.1 ? 0.4 : 0.1;
   console.log(`灯光强度切换: 方向光=${directionalLight.intensity.toFixed(1)}, 点光源=${pointLight.intensity.toFixed(1)}`);
 }
 
@@ -1135,7 +1147,7 @@ function loadNigiriModel() {
     loader.load('models/nigiri.glb', function(gltf) {
       console.log('寿司模型加载成功');
       const nigiriTemplate = gltf.scene;
-      nigiriTemplate.scale.set(0.2, 0.2, 0.2); // 设置合适的大小
+      nigiriTemplate.scale.set(0.3, 0.3, 0.3); // 增大寿司尺寸
       nigiriTemplate.visible = false; // 模板初始不可见
       scene.add(nigiriTemplate);
       resolve(nigiriTemplate);
