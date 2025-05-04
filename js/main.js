@@ -752,13 +752,17 @@ function endGame(reason = '游戏结束!') {
     // 播放失败音效
     const failSound = sounds['fail'];
     
-    // 设置失败音效播放完成后的回调
-    failSound.onEnded = function() {
-      // 失败音效播放完毕后再播放背景音乐
-      playBackgroundMusic('menuMusic');
-    };
-    
+    // 获取音效时长，并在音效播放完毕后再播放背景音乐
+    // THREE.js音频没有标准的onended事件，所以使用setTimeout
     failSound.play();
+    
+    // 估算失败音效的持续时间（秒），如果不知道确切时间，可以使用大致值
+    const failSoundDuration = 3000; // 假设2秒
+    
+    // 在音效播放完后再播放背景音乐
+    setTimeout(function() {
+      playBackgroundMusic('menuMusic');
+    }, failSoundDuration);
   } else {
     // 如果失败音效还没加载好，直接播放背景音乐
     playBackgroundMusic('menuMusic');
@@ -1340,7 +1344,7 @@ function updateFoods(time) {
   });
 }
 
-// 在init函数开始部分添加音频系统初始化
+// 在init函数开始部分添加音频系统初始化调用
 function initAudioSystem() {
   // 创建音频监听器
   listener = new THREE.AudioListener();
@@ -1352,8 +1356,12 @@ function initAudioSystem() {
   loadSound('menuMusic', 'music/happy-mood-126767.mp3', true);
   loadSound('gameMusic', 'music/happy-xmas-happy-new-year-2025-271088.mp3', true);
   
-  // 开始播放菜单音乐
-  playBackgroundMusic('menuMusic');
+  // 设置较长的延迟确保音频加载完成
+  setTimeout(function() {
+    if (!currentBackgroundMusic) {
+      playBackgroundMusic('menuMusic');
+    }
+  }, 2000); // 增加到2秒
 }
 
 // 修改loadSound函数，让背景音乐立即播放
