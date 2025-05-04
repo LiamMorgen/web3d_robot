@@ -166,43 +166,48 @@ This is a 3D interactive application developed using Three.js for my 3D App assi
 
 The game logic flow is illustrated below:
 
-```mermaid
-graph TD
-    A[Start] --> B{Game State Check}
-    B -->|Not Started| C[Display "Press SPACE to start" prompt]
-    B -->|In Progress| D[Game Main Loop]
-    B -->|Game Over| E[Display "Game Over" and Score]
-    
-    C -->|User presses Space| F[Initialize Game]
-    E -->|User presses Space| F
-    
-    F --> G[Set Character Initial Position]
-    F --> H[Set Car Initial Position]
-    F --> I[Reset Score and Speed]
-    F --> J[Start Game Music]
-    F --> D
-    
-    D --> K[Update Character Position]
-    D --> L[Update Car Position]
-    D --> M[Check Collisions]
-    D --> N[Generate/Update Food]
-    D --> O[Check Food Collisions]
-    D --> P[Increase Time Score]
-    D --> Q[Check Boundaries]
-    
-    M -->|Collision Detected| R[Game Over Process]
-    Q -->|Out of Bounds| R
-    O -->|Food Collected| S[Apply Speed Boost]
-    
-    R --> T[Stop Game Music]
-    R --> U[Play Fail Sound]
-    R --> E
-    
-    S --> V[Increase Movement Speed]
-    S --> W[Start Speed Boost Timer]
-    S --> X[Play Reward Sound]
-    
-    W -->|Timer Ends| Y[Restore Normal Speed]
+```
++------------------+     +-------------------+     +---------------+
+| Start            |---->| Game State Check  |---->| Game Over     |
++------------------+     +-------------------+     +---------------+
+                          |               ^          |
+                          v               |          v
+ +-----------------------+|               |  +------------------+
+ | Not Started:          ||               |  | Display Game Over|
+ | "Press SPACE to start"||               |  | and Score        |
+ +-----------------------+|               |  +------------------+
+                          v               |          |
+                    +---------------+     |          |
+                    | Initialize    |<----+          |
+                    | Game          |<-----------------
+                    +---------------+
+                          |
+                          v
+                    +---------------+                          
+                    | Game Main Loop|<-------------------+    
+                    |               |                    |    
+                          |                              |
+                          v                              |
+        +-----------------------------------+            |
+        |                                   |            |
+        v                v                  v            |
+ +-------------+  +---------------+  +---------------+   |
+ | Update      |  | Check         |  | Check Food &  |   |
+ | Positions   |  | Collisions    |  | Boundaries    |   |
+ +-------------+  +---------------+  +---------------+   |
+                          |                  |           |
+                          v                  v           |
+                  +----------------+  +---------------+  |
+                  | Game Over      |  | Speed Boost   |  |
+                  | if Collision   |  | if Food       |  |
+                  +----------------+  +---------------+  |
+                          |                  |           |
+                          |                  +----------+
+                          v
+                  +----------------+
+                  | Stop Music     |
+                  | Play Fail Sound|
+                  +----------------+
 ```
 
 ## Project Structure
