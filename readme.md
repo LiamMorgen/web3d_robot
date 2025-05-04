@@ -53,7 +53,20 @@ This is a 3D interactive application developed using Three.js for my 3D App assi
    cd 3d-character-animation-app
    ```
 
-2. **Start a local server**
+2. **Prepare the required 3D models**
+   
+   Place the following models in the `models/` directory:
+   ```
+   models/
+   ├── car.glb              # Car model
+   ├── eva-animated.glb     # Eva character model with animations
+   ├── eva-texture.png      # Eva texture file
+   ├── ground.glb           # Ground/environment model
+   └── nigiri.glb           # Sushi food item model
+   ```
+   These models are required for the application to function properly.
+
+3. **Start a local server**
 
    Method 1: Using Node.js http-server
    ```bash
@@ -75,7 +88,7 @@ This is a 3D interactive application developed using Three.js for my 3D App assi
    Then open http://127.0.0.1:8080 in your browser
    
 
-3. **Access the application**
+4. **Access the application**
    Open your browser and visit `http://localhost:8080` or the port specified by your server
 
 ## Technology Stack
