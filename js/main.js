@@ -460,7 +460,7 @@ function animate() {
     checkCollision();
     
     if (checkBoundary()) {
-      endGame('你掉出了边界！');
+      endGame('You fell off the boundary!');
     }
   }
   
@@ -631,7 +631,7 @@ function updateCharacterState() {
   // 在角色移动后立即检查边界
   if (character && gameStarted && !gameOver) {
     if (checkBoundary()) {
-      endGame('你掉出了边界！');
+      endGame('You fell off the boundary!');
     }
   }
 }
@@ -647,15 +647,15 @@ function addGameUI() {
   gameUI.style.fontSize = '20px';
   gameUI.style.zIndex = '100';
   gameUI.innerHTML = `
-    <div id="game-status">按空格键开始游戏 (P键暂停)</div>
-    <div id="game-score">分数: 0</div>
-    <div id="game-time">时间: 0秒</div>
+    <div id="game-status">Press SPACE to start (P to pause)</div>
+    <div id="game-score">Score: 0</div>
+    <div id="game-time">Time: 0s</div>
   `;
   document.body.appendChild(gameUI);
   
   // 添加游戏开始按钮
   const startButton = document.createElement('button');
-  startButton.textContent = '开始游戏';
+  startButton.textContent = 'Start Game';
   startButton.className = 'btn';
   startButton.style.position = 'fixed';
   startButton.style.top = '170px';
@@ -723,8 +723,8 @@ function startGame() {
   lastFoodSpawnTime = Date.now();
   
   // 更新UI
-  document.getElementById('game-status').textContent = '游戏进行中';
-  document.getElementById('game-score').textContent = `分数: ${score}`;
+  document.getElementById('game-status').textContent = 'Game in progress';
+  document.getElementById('game-score').textContent = `Score: ${score}`;
   
   // 确保角色和汽车可见
   if (character) character.visible = true;
@@ -734,12 +734,12 @@ function startGame() {
 }
 
 // 结束游戏
-function endGame(reason = '游戏结束!') {
+function endGame(reason = 'Game over! Press SPACE to restart') {
   gameStarted = false;
   gameOver = true;
   
   // 更新UI
-  document.getElementById('game-status').textContent = reason + ' 按空格键重新开始';
+  document.getElementById('game-status').textContent = reason;
   
   // 先播放失败音效，然后再播放背景音乐
   if (sounds['fail']) {
@@ -776,8 +776,8 @@ function resetGame() {
   score = 0;
   carSpeed = 1.0;
   
-  document.getElementById('game-score').textContent = `分数: ${score}`;
-  document.getElementById('game-time').textContent = `时间: 0秒`;
+  document.getElementById('game-score').textContent = `Score: ${score}`;
+  document.getElementById('game-time').textContent = `Time: 0s`;
 }
 
 // 更新游戏分数
@@ -788,8 +788,8 @@ function updateScore() {
   const elapsedSeconds = Math.floor((currentTime - gameStartTime) / 1000);
   
   score = elapsedSeconds;
-  document.getElementById('game-score').textContent = `分数: ${score}`;
-  document.getElementById('game-time').textContent = `时间: ${elapsedSeconds}秒`;
+  document.getElementById('game-score').textContent = `Score: ${score}`;
+  document.getElementById('game-time').textContent = `Time: ${elapsedSeconds}s`;
   
   // 随着时间推移增加汽车速度
   carSpeed += carAcceleration * elapsedSeconds;
@@ -809,7 +809,7 @@ function checkCollision() {
   
   if (distSquared < safeDistanceSquared) {
     // 播放失败音效在endGame中处理
-    endGame('你被车撞到了！');
+    endGame('You were hit by a car!');
   }
 }
 
@@ -1156,12 +1156,12 @@ function togglePause() {
   let statusElement = document.getElementById('game-status');
   if (isPaused) {
     if (gameStarted && !gameOver) {
-      statusElement.textContent = '游戏已暂停（按P继续）';
+      statusElement.textContent = 'Game paused (Press P to continue)';
     }
     console.log('游戏已暂停');
   } else {
     if (gameStarted && !gameOver) {
-      statusElement.textContent = '游戏进行中';
+      statusElement.textContent = 'Game in progress';
     }
     console.log('游戏已恢复');
   }
@@ -1302,7 +1302,7 @@ function applySpeedBoost() {
   // 更新UI提示
   const gameStatus = document.getElementById('game-status');
   if (gameStarted && !gameOver && !isPaused) {
-    gameStatus.textContent = '速度提升中！';
+    gameStatus.textContent = 'Speed boost active!';
     gameStatus.style.color = '#ffff00';
   }
   
@@ -1320,7 +1320,7 @@ function checkSpeedBoostTime() {
     // 更新UI
     const gameStatus = document.getElementById('game-status');
     if (gameStarted && !gameOver && !isPaused) {
-      gameStatus.textContent = '游戏进行中';
+      gameStatus.textContent = 'Game in progress';
       gameStatus.style.color = '#0ff'; // 恢复原来的颜色
     }
     
